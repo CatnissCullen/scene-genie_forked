@@ -12,9 +12,11 @@ from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
 from ldm.modules.guidance import Guider
 import json, gc
-#import pdb
 
-#pdb.set_trace()
+
+# import pdb
+
+# pdb.set_trace()
 
 def load_model_from_config(config, ckpt, verbose=False):
     print(f"Loading model from {ckpt}")
@@ -41,7 +43,7 @@ if __name__ == "__main__":
         "--prompt",
         type=str,
         nargs="?",
-        default="two raw eggs in a frying pan", #a painting of a virus monster playing guitar
+        default="two raw eggs in a frying pan",  # a painting of a virus monster playing guitar
         help="the prompt to render"
     )
 
@@ -105,7 +107,7 @@ if __name__ == "__main__":
         default=5.0,
         help="unconditional guidance scale: eps = eps(x, empty) + scale * (eps(x, cond) - eps(x, empty))",
     )
-    
+
     parser.add_argument(
         "--begin",
         type=int,
@@ -116,33 +118,33 @@ if __name__ == "__main__":
         type=int,
         default=1024
     )
-    
+
     parser.add_argument(
         "--data_source",
         type=str,
-        default="coco" #prompt
+        default="coco"  # prompt
     )
     parser.add_argument(
         "--data_path",
         type=str,
-        default="./scenegenie/predicted_1110/SG2IM_CLIP/COCO/"
+        default="./scenegenie/predicted_1110/SG2IM_CLIP/COCO/"  # TODO: how to generate this???
     )
     parser.add_argument(
         "--scene_genie",
         action='store_true',
         help="use scene_genie guidance",
     )
-    
+
     parser.add_argument(
         "--SDT2I_path",
         type=str,
         default="models/ldm/text2img-large/model.ckpt"
     )
-        
+
     opt = parser.parse_args()
 
-
-    config = OmegaConf.load("configs/latent-diffusion/txt2img-1p4B-eval.yaml")  # TODO: Optionally download from same location as ckpt and chnage this logic
+    config = OmegaConf.load(
+        "configs/latent-diffusion/txt2img-1p4B-eval.yaml")  # TODO: Optionally download from same location as ckpt and chnage this logic
     print("Config loaded")
     model = load_model_from_config(config, opt.SDT2I_path)  # TODO: check path
 
@@ -165,27 +167,25 @@ if __name__ == "__main__":
     sample_path = os.path.join(outpath, "samples")
     os.makedirs(sample_path, exist_ok=True)
     base_count = len(os.listdir(sample_path))
-    
-    
+
     if opt.data_source == "coco":
         folder = opt.data_path
-        for index in range(opt.begin,  opt.end):
+        for index in range(opt.begin, opt.end):
             obj_list = None
             with open(
-                    f"{folder}/caption/"+ str(index) + "_caption", "r") as fp:
+                    f"{folder}/caption/" + str(index) + "_caption", "r") as fp:
 
                 prompt = json.load(fp)
 
             with open(
-                    f"{folder}/obj_list/"+ str(index) + "_obj", "r") as f:
+                    f"{folder}/obj_list/" + str(index) + "_obj", "r") as f:
 
                 obj_list = json.load(f)
-                
-            #diffusion_init = None
+
+            # diffusion_init = None
             bounding_box_pred = torch.load(
                 f"{folder}/box/"
-                + str(index) ).cuda()
-            
+                + str(index)).cuda()
 
             bounding_box_pred = torch.clamp(bounding_box_pred, min=0.0, max=1.0)
 
@@ -196,14 +196,14 @@ if __name__ == "__main__":
 
             print("prompt", prompt[0])
 
-
-            bounding_box_pred =  torch.cat( (bounding_box_pred,torch.unsqueeze( torch.FloatTensor([0,0,1,1]), 0).cuda()),0).cpu()
+            bounding_box_pred = torch.cat(
+                (bounding_box_pred, torch.unsqueeze(torch.FloatTensor([0, 0, 1, 1]), 0).cuda()), 0).cpu()
 
             if opt.scene_genie:
                 score_corrector.setData(prompt, bounding_box_pred, obj_list)
-            
+
             gc.collect()
-            
+
             with torch.no_grad():
                 with model.ema_scope():
                     uc = None
@@ -211,7 +211,7 @@ if __name__ == "__main__":
                         uc = model.get_learned_conditioning(opt.n_samples * [""])
                     for n in trange(opt.n_iter, desc="Sampling"):
                         c = model.get_learned_conditioning(opt.n_samples * prompt)
-                        shape = [4, opt.H//8, opt.W//8]
+                        shape = [4, opt.H // 8, opt.W // 8]
                         samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
                                                          conditioning=c,
                                                          batch_size=opt.n_samples,
@@ -223,16 +223,17 @@ if __name__ == "__main__":
                                                          score_corrector=score_corrector)
 
                         x_samples_ddim = model.decode_first_stage(samples_ddim)
-                        x_samples_ddim = torch.clamp((x_samples_ddim+1.0)/2.0, min=0.0, max=1.0)
+                        x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
 
                         for x_sample in x_samples_ddim:
                             x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
-                            Image.fromarray(x_sample.astype(np.uint8)).save(os.path.join(sample_path, f"{index:04}.png"))
+                            Image.fromarray(x_sample.astype(np.uint8)).save(
+                                os.path.join(sample_path, f"{index:04}.png"))
                             base_count += 1
 
-        
+
     else:
-        all_samples=list()
+        all_samples = list()
         with torch.no_grad():
             with model.ema_scope():
                 uc = None
@@ -240,7 +241,7 @@ if __name__ == "__main__":
                     uc = model.get_learned_conditioning(opt.n_samples * ["The eggs are raw. There are only two eggs."])
                 for n in trange(opt.n_iter, desc="Sampling"):
                     c = model.get_learned_conditioning(opt.n_samples * [prompt])
-                    shape = [4, opt.H//8, opt.W//8]
+                    shape = [4, opt.H // 8, opt.W // 8]
                     samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
                                                      conditioning=c,
                                                      batch_size=opt.n_samples,
@@ -252,14 +253,14 @@ if __name__ == "__main__":
                                                      score_corrector=score_corrector)
 
                     x_samples_ddim = model.decode_first_stage(samples_ddim)
-                    x_samples_ddim = torch.clamp((x_samples_ddim+1.0)/2.0, min=0.0, max=1.0)
+                    x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
 
                     for x_sample in x_samples_ddim:
                         x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
-                        Image.fromarray(x_sample.astype(np.uint8)).save(os.path.join(sample_path, f"{base_count:04}.png"))
+                        Image.fromarray(x_sample.astype(np.uint8)).save(
+                            os.path.join(sample_path, f"{base_count:04}.png"))
                         base_count += 1
                     all_samples.append(x_samples_ddim)
-
 
         # additionally, save as grid
         grid = torch.stack(all_samples, 0)
